@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Desafio de Tiro ao Alvo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: #0f172a;
+      color: #f8fafc;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .header-panel {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 15px;
+      background: #1e293b;
+      padding: 12px 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+      border: 1px solid #334155;
+    }
+
+    .stat-box {
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #38bdf8;
+    }
+
+    #game-container {
+      position: relative;
+      width: 800px;
+      height: 500px;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+      border: 2px solid #334155;
+      cursor: crosshair;
+    }
+
+    canvas {
+      background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+      display: block;
+    }
+
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+    }
+
+    .overlay h1 {
+      font-size: 36px;
+      color: #f1f5f9;
+    }
+
+    .overlay p {
+      font-size: 18px;
+      color: #94a3b8;
+    }
+
+    .btn {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 12px 28px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .btn:hover {
+      background: #0369a1;
+      transform: scale(1.05);
+    }
+
+    .btn:active {
+      transform: scale(0.98);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- PAINEL DE ESTATÍSTICAS -->
+  <div class="header-panel">
+    <div class="stat-box">
+      <div class="stat-label">Pontuação</div>
+      <div class="stat-value" id="score">0</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Precisão</div>
+      <div class="stat-value" id="accuracy">100%</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-label">Tempo</div>
+      <div class="stat-value" id="timer">30s</div>
+    </div>
+  </div>
+
+  <!-- CONTAINER DO JOGO -->
+  <div id="game-container">
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <!-- TELA INICIAL -->
+    <div id="start-screen" class="overlay">
+      <h1>Treino de Precisão</h1>
+      <p>Acerte o máximo de alvos antes que o tempo acabe!</p>
+      <button class="btn" onclick="startGame()">INICIAR JOGO</button>
+    </div>
+
+    <!-- TELA DE FIM DE JOGO -->
+    <div id="end-screen" class="overlay hidden">
+      <h1>Fim de Jogo!</h1>
+      <p id="final-stats">Pontuação: 0 | Precisão: 0%</p>
+      <button class="btn" onclick="startGame()">JOGAR NOVAMENTE</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const scoreEl = document.getElementById("score");
+    const accuracyEl = document.getElementById("accuracy");
+    const timerEl = document.getElementById("timer");
+    const startScreen = document.getElementById("start-screen");
+    const endScreen = document.getElementById("end-screen");
+    const finalStatsEl = document.getElementById("final-stats");
+
+    let score = 0;
+    let shotsFired = 0;
+    let shotsHit = 0;
+    let timeLeft = 30;
+    let gameInterval = null;
+    let timerInterval = null;
+    let targets = [];
+    let isPlaying = false;
+
+    class Target {
+      constructor() {
+        this.radius = Math.floor(Math.random() * 15) + 15; // Tamanho do alvo (15px a 30px)
+        this.x = Math.random() * (canvas.width - this.radius * 2) + this.radius;
+        this.y = Math.random() * (canvas.height - this.radius * 2) + this.radius;
+        this.color = "#ef4444";
+      }
+
+      draw() {
+        // Círculo Externo
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = "#ef4444";
+        ctx.fill();
+        ctx.closePath();
+
+        // Círculo Intermediário
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 0.65, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffffff";
+        ctx.fill();
+        ctx.closePath();
+
+        // Círculo Central (Centro)
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius * 0.3, 0, Math.PI * 2);
+        ctx.fillStyle = "#ef4444";
+        ctx.fill();
+        ctx.closePath();
+      }
+    }
+
+    function spawnTarget() {
+      targets = [new Target()];
+    }
+
+    function updateStats() {
+      scoreEl.innerText = score;
+      const acc = shotsFired > 0 ? Math.round((shotsHit / shotsFired) * 100) : 100;
+      accuracyEl.innerText = `${acc}%`;
+      timerEl.innerText = `${timeLeft}s`;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      targets.forEach(target => target.draw());
+    }
+
+    function startGame() {
+      score = 0;
+      shotsFired = 0;
+      shotsHit = 0;
+      timeLeft = 30;
+      isPlaying = true;
+
+      startScreen.classList.add("hidden");
+      endScreen.classList.add("hidden");
+
+      updateStats();
+      spawnTarget();
+      draw();
+
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        updateStats();
+        if (timeLeft <= 0) {
+          endGame();
+        }
+      }, 1000);
+    }
+
+    canvas.addEventListener("click", (e) => {
+      if (!isPlaying) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      shotsFired++;
+      let hit = false;
+
+      targets.forEach((target, index) => {
+        const dist = Math.hypot(mouseX - target.x, mouseY - target.y);
+        if (dist < target.radius) {
+          hit = true;
+          shotsHit++;
+          score += Math.round(100 / target.radius * 10); // Alvos menores dão mais pontos
+          spawnTarget();
+        }
+      });
+
+      updateStats();
+      draw();
+    });
+
+    function endGame() {
+      isPlaying = false;
+      clearInterval(timerInterval);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const acc = shotsFired > 0 ? Math.round((shotsHit / shotsFired) * 100) : 0;
+      finalStatsEl.innerText = `Pontuação Final: ${score} | Precisão: ${acc}%`;
+      endScreen.classList.remove("hidden");
+    }
+  </script>
+</body>
+  </html>
+  
